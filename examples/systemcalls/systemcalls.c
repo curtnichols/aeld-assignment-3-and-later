@@ -62,6 +62,9 @@ bool do_exec(int count, ...)
     {
         command[i] = va_arg(args, char *);
     }
+
+    va_end(args);
+
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
@@ -100,8 +103,6 @@ bool do_exec(int count, ...)
         return exitCode == 0;
     }
 
-    va_end(args);
-
     return true;
 }
 
@@ -120,6 +121,9 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     {
         command[i] = va_arg(args, char *);
     }
+
+    va_end(args);
+
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
@@ -170,8 +174,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         int exitCode = WEXITSTATUS(status);
         return exitCode == 0;
     }
-
-    va_end(args);
 
     return true;
 }
