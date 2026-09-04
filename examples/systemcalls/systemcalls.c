@@ -1,4 +1,9 @@
 #include "systemcalls.h"
+#include <fcntl.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -11,11 +16,24 @@ bool do_system(const char *cmd)
 {
 
 /*
- * TODO  add your code here
+ * xTODO  add your code here
  *  Call the system() function with the command set in the cmd
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    int status = system(cmd);
+
+    if (status == -1) {
+        return false;
+    }
+
+    if (WIFEXITED(status)) {
+        int exit_code = WEXITSTATUS(status);
+        return exit_code == 0;
+    }
+    else if (WIFSIGNALED(status)) {
+        return false;
+    }
 
     return true;
 }
@@ -47,10 +65,10 @@ bool do_exec(int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 /*
- * TODO:
+ * xTODO:
  *   Execute a system command by calling fork, execv(),
  *   and wait instead of system (see LSP page 161).
  *   Use the command[0] as the full path to the command to execute
@@ -58,6 +76,43 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+
+    int status;
+    pid_t pid;
+
+    printf("### --- START ---\n");
+    for (int i = 0; i < count + 1; i++) {
+        printf("### arg[%i]=[%s]\n", i, command[i]);
+    }
+    
+    fflush(stdout); // avoid duplicate output
+    pid = fork();
+
+    if (pid == -1) {
+        printf("### 000\n");
+        return false;
+    }
+    else if (pid == 0) {
+        printf("### AAA\n");
+        const char * const the_command = command[0];
+        execv(the_command, command);
+        printf("### -AAA\n");
+        return false; // We shouldn't get here.
+    }
+
+    if (waitpid(pid, &status, 0) == -1) {
+        printf("### BBB\n");
+        return false;
+    }
+    else if (WIFEXITED(status)) {
+        printf("### CCC\n");
+        int exitCode = WEXITSTATUS(status);
+        printf("### DDD: status=%i; exitCode=%i\n", status, exitCode);
+
+        return exitCode == 0;
+    }
+
+    printf("### EEE\n");
 
     va_end(args);
 
@@ -82,7 +137,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 
 /*
@@ -92,6 +147,46 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+
+    int status;
+    pid_t pid;
+
+    int fd = open(outputfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) {
+        perror("open failed");
+        return false;
+    }
+
+    if (dup2(fd, STDOUT_FILENO) < 0) {
+        perror("dup2 failure");
+        close(fd);
+        return false;
+    }
+
+    close(fd);
+
+    fflush(stdout); // avoid duplicate output
+    pid = fork();
+
+    if (pid == -1) {
+        return false;
+    }
+    else if (pid == 0) {
+
+        const char * const the_command = command[0];
+
+        execv(the_command, command);
+
+        return false; // We shouldn't get here.
+    }
+
+    if (waitpid(pid, &status, 0) == -1) {
+        return false;
+    }
+    else if (WIFEXITED(status)) {
+        int exitCode = WEXITSTATUS(status);
+        return exitCode == 0;
+    }
 
     va_end(args);
 
