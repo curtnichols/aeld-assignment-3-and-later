@@ -158,7 +158,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         return false;
     }
     else if (pid == 0) {
-
         const char * const the_command = command[0];
         execv(the_command, command);
         exit(-1); // We shouldn't get here; need to stop the process NOW.
