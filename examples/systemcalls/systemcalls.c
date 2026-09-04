@@ -84,9 +84,11 @@ bool do_exec(int count, ...)
     for (int i = 0; i < count + 1; i++) {
         printf("### arg[%i]=[%s]\n", i, command[i]);
     }
-    
+
     fflush(stdout); // avoid duplicate output
+    printf("### >>>\n");
     pid = fork();
+    printf("### <<<\n");
 
     if (pid == -1) {
         printf("### 000\n");
