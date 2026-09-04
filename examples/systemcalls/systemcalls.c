@@ -147,14 +147,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         return false;
     }
 
-    if (dup2(fd, STDOUT_FILENO) < 0) {
-        perror("dup2 failure");
-        close(fd);
-        return false;
-    }
-
-    close(fd);
-
     fflush(stdout); // avoid duplicate output
     pid = fork();
 
@@ -162,10 +154,19 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         return false;
     }
     else if (pid == 0) {
+        if (dup2(fd, STDOUT_FILENO) < 0) {
+            perror("dup2 failure");
+            close(fd);
+            return false;
+        }
+
         const char * const the_command = command[0];
+        close(fd);
         execv(the_command, command);
         exit(-1); // We shouldn't get here; need to stop the process NOW.
     }
+
+    close(fd);
 
     if (waitpid(pid, &status, 0) == -1) {
         return false;
