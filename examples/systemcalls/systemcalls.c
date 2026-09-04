@@ -80,41 +80,25 @@ bool do_exec(int count, ...)
     int status;
     pid_t pid;
 
-    printf("### --- START ---\n");
-    for (int i = 0; i < count + 1; i++) {
-        printf("### arg[%i]=[%s]\n", i, command[i]);
-    }
-
     fflush(stdout); // avoid duplicate output
-    printf("### >>>\n");
     pid = fork();
-    printf("### <<<\n");
 
     if (pid == -1) {
-        printf("### 000\n");
         return false;
     }
     else if (pid == 0) {
-        printf("### AAA\n");
         const char * const the_command = command[0];
         execv(the_command, command);
-        printf("### -AAA\n");
-        return false; // We shouldn't get here.
+        exit(-1); // We shouldn't get here; need to stop the process NOW.
     }
 
     if (waitpid(pid, &status, 0) == -1) {
-        printf("### BBB\n");
         return false;
     }
     else if (WIFEXITED(status)) {
-        printf("### CCC\n");
         int exitCode = WEXITSTATUS(status);
-        printf("### DDD: status=%i; exitCode=%i\n", status, exitCode);
-
         return exitCode == 0;
     }
-
-    printf("### EEE\n");
 
     va_end(args);
 
@@ -176,10 +160,8 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     else if (pid == 0) {
 
         const char * const the_command = command[0];
-
         execv(the_command, command);
-
-        return false; // We shouldn't get here.
+        exit(-1); // We shouldn't get here; need to stop the process NOW.
     }
 
     if (waitpid(pid, &status, 0) == -1) {
