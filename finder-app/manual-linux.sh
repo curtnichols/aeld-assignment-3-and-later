@@ -127,7 +127,7 @@ sudo mknod -m 600 ${OUTDIR}/rootfs/dev/console c 5 1
 ls -l ${OUTDIR}/rootfs/dev/
 
 # xTODO: Clean and build the writer utility
-pushd /home/curt/ecea-5305/git/assignment-1-curtnichols/finder-app
+pushd ${FINDER_APP_DIR}
 make clean
 make CROSS_COMPILE=aarch64-none-linux-gnu-
 
