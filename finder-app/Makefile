@@ -7,6 +7,8 @@ LD  = $(CROSS_COMPILE)ld
 
 CFLAGS ?=
 
+all : writer
+
 writer : writer.o
 	$(CC) $(CFLAGS) -o writer writer.o
 	chmod 755 writer
