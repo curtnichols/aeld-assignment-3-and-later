@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
     // You do not need to make your "writer" utility create directories which
     // do not exist.  You can assume the directory is created by the caller.
 
-    int fd = open(filePath, O_WRONLY | O_CREAT | O_TRUNC);
+    int fd = open(filePath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd == -1)
     {
         const char* const errorDescription = strerror(errno);
@@ -59,13 +59,13 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (chmod(filePath, 0600) == -1)
-    {
-        const char* const errorDescription = strerror(errno);
-        fprintf(stderr, "Could not set file permissions: %s\n", errorDescription);
-        syslog(LOG_ERR, "Could not set file permissions: %s", errorDescription);
-        return 1;
-    }
+    // if (chmod(filePath, 0600) == -1)
+    // {
+    //     const char* const errorDescription = strerror(errno);
+    //     fprintf(stderr, "Could not set file permissions: %s\n", errorDescription);
+    //     syslog(LOG_ERR, "Could not set file permissions: %s", errorDescription);
+    //     return 1;
+    // }
 
     return 0;
 }
