@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <syslog.h>
 #include <unistd.h>
 #include <netdb.h>
 
@@ -61,11 +62,22 @@ int listen_and_accept(int sockfd) {
     }
 
     printf("Listening...\n");
-    
+
     addr_size = sizeof their_addr;
     result = accept(sockfd, (struct sockaddr *)&their_addr, &addr_size);
     if (result == -1) {
+        return -1;
     }
+
+    char ip_str[NI_MAXHOST];
+    int res = getnameinfo((struct sockaddr *)&their_addr, sizeof(their_addr), 
+                        ip_str, sizeof(ip_str), 
+                        NULL, 0, NI_NUMERICHOST);
+    if (res == 0) {
+        printf("Accepted connection from %s\n", ip_str);
+    }
+    syslog(LOG_INFO, "Accepted connection from %s", ip_str);
+
     return result;
 }
 
