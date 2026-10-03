@@ -30,13 +30,14 @@ int open_and_bind_socket() {
         return -1;
     }
 
-    result = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (result == -1) {
+    int sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (sockfd == -1) {
         clean_up(&res);
         return -1;
     }
 
-    result = bind(result /*fd*/, res->ai_addr, res->ai_addrlen);
+    printf("open_and_bind_socket: socket=[%d]\n", sockfd);
+    result = bind(sockfd, res->ai_addr, res->ai_addrlen);
     if (result == -1) {
         clean_up(&res);
         return -1;
@@ -44,19 +45,58 @@ int open_and_bind_socket() {
 
     freeaddrinfo(res);
 
+    return sockfd;
+}
+
+int listen_and_accept(int sockfd) {
+    struct sockaddr_storage their_addr;
+    socklen_t addr_size;
+    int result;
+
+    printf("sockfd=[%d]\n", sockfd);
+    result = listen(sockfd, 1);
+    if (result == -1) {
+        perror("listen()");
+        return result;
+    }
+
+    printf("Listening...\n");
+    
+    addr_size = sizeof their_addr;
+    result = accept(sockfd, (struct sockaddr *)&their_addr, &addr_size);
+    if (result == -1) {
+    }
     return result;
 }
 
+int process_a_connection(int sockfd) {
+    int cxn_fd;
+
+    cxn_fd = listen_and_accept(sockfd);
+    if (cxn_fd == -1) {
+        printf("Couldn't listen and accept\n");
+        return -1;
+    }
+
+    close(cxn_fd);
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
-    int sock = open_and_bind_socket();
-    if (sock == -1) {
+    int sockfd = open_and_bind_socket();
+    if (sockfd == -1) {
         printf("Couldn't open the socket\n");
         return -1;
     }
-    else {
-        printf("Opened the socket\n");
-        close(sock);
-        return 0;
-    }
+
+    printf("Opened the socket [%d]\n", sockfd);
+
+    int result;
+
+    result = process_a_connection(sockfd);
+
+    close(sockfd);
+
+    return 0;
 }
 
