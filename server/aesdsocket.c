@@ -1,11 +1,17 @@
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <syslog.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <fcntl.h>
+
+#define LOG(s) printf("aesdsocket: %s\n", (s))
+
+int quit = 0;
 
 void clean_up(struct addrinfo **res) {
     if (*res != NULL) {
@@ -37,9 +43,17 @@ int open_and_bind_socket() {
         return -1;
     }
 
-    printf("open_and_bind_socket: socket=[%d]\n", sockfd);
+    {
+        int yes = 1;
+        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) != 0) {
+            perror("setsockopt failed");
+            return -1;
+        }
+    }
+
     result = bind(sockfd, res->ai_addr, res->ai_addrlen);
     if (result == -1) {
+        perror("bind failed");
         clean_up(&res);
         return -1;
     }
@@ -54,14 +68,12 @@ int listen_and_accept(int sockfd) {
     socklen_t addr_size;
     int result;
 
-    printf("sockfd=[%d]\n", sockfd);
+    //LOG("Listening...");
     result = listen(sockfd, 1);
     if (result == -1) {
         perror("listen()");
         return result;
     }
-
-    printf("Listening...\n");
 
     addr_size = sizeof their_addr;
     result = accept(sockfd, (struct sockaddr *)&their_addr, &addr_size);
@@ -70,15 +82,104 @@ int listen_and_accept(int sockfd) {
     }
 
     char ip_str[NI_MAXHOST];
-    int res = getnameinfo((struct sockaddr *)&their_addr, sizeof(their_addr), 
-                        ip_str, sizeof(ip_str), 
-                        NULL, 0, NI_NUMERICHOST);
-    if (res == 0) {
-        printf("Accepted connection from %s\n", ip_str);
-    }
+    getnameinfo((struct sockaddr *)&their_addr, sizeof(their_addr), 
+                ip_str, sizeof(ip_str), 
+                NULL, 0, NI_NUMERICHOST);
     syslog(LOG_INFO, "Accepted connection from %s", ip_str);
 
     return result;
+}
+
+struct mybuf {
+    char* buffer;
+    size_t buffer_len;
+};
+
+void init_mybuf(struct mybuf *buf) {
+    buf->buffer = NULL;
+    buf->buffer_len = 0;
+}
+
+void free_mybuf(struct mybuf *buf) {
+    free(buf->buffer); // safe if NULL
+    buf->buffer = NULL;
+    buf->buffer_len = 0;
+}
+
+int add_buffer_length(size_t size, struct mybuf *buf) {
+    if (size == 0) {
+        printf("size should not be zero\n");
+        return -1;
+    }
+
+    if (buf->buffer == NULL) {
+        buf->buffer = malloc(size);
+        if (buf->buffer == NULL) {
+            return -1;
+        }
+
+        buf->buffer_len = size;
+    }
+    else {
+        const size_t new_size = buf->buffer_len + size;
+        char* b = realloc(buf->buffer, new_size);
+        if (b == NULL) {
+            return -1;
+        }
+
+        buf->buffer = b;
+        buf->buffer_len = new_size;
+    }
+
+    return 0;
+}
+
+int append_to_buffer(const char *data, size_t len, struct mybuf *buf) {
+    const size_t original_size = buf->buffer_len;
+    int result = add_buffer_length(len, buf);
+    if (result != 0) {
+        return result;
+    }
+
+    memcpy(buf->buffer + original_size, data, len);
+    return 0;
+}
+
+int length_of_incoming_data(const struct mybuf *buf) {
+    char* match = memchr(buf->buffer, '\n', buf->buffer_len);
+    if (match == NULL) {
+        return -1;
+    }
+    else {
+        return match - buf->buffer + 1; // +1 for the \n
+    }
+}
+
+int truncate_data(size_t skip_first, struct mybuf *buf) {
+    if (skip_first > buf->buffer_len) {
+        printf("skip is greater than buffer len");
+        return -1;
+    }
+
+    const size_t remainder = buf->buffer_len - skip_first;
+
+    if (remainder == 0) {
+        free_mybuf(buf);
+    }
+    else {
+        // memmove() is safe for overlapping buffers.
+        memmove(buf->buffer, buf->buffer + skip_first, remainder);
+        char *b = realloc(buf->buffer, remainder);
+        if (b == NULL) {
+            printf("truncate_data: realloc failed\n");
+            return -1;
+        }
+
+        buf->buffer = b;
+        buf->buffer_len = remainder;
+    }
+
+    return 0;
 }
 
 int process_a_connection(int sockfd) {
@@ -90,8 +191,64 @@ int process_a_connection(int sockfd) {
         return -1;
     }
 
+    int outfile = open(
+        "/var/tmp/aesdsocketdata",
+        O_RDWR | O_CREAT | O_APPEND | O_SYNC,
+        S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+    if (outfile == -1) {
+        perror("Couldn't open output file");
+        return -1;
+    }
+
+    struct mybuf buf;
+    init_mybuf(&buf);
+    char read_buffer[16 * 1024]; // stack size on ubuntu is 8192 KB (ulimit -s)
+
+    int result = 0;
+
+    while (!quit && result == 0) {
+        ssize_t cb = read(cxn_fd, read_buffer, sizeof read_buffer);
+        if (cb < 0) {
+            result = -1;
+            break;
+        }
+        else if (cb == 0) {
+            // socket was closed in an orderly fashion
+            break;
+        }
+
+        append_to_buffer(read_buffer, cb, &buf);
+        int packet_size;
+
+        while ((packet_size = length_of_incoming_data(&buf)) > 0) {
+            write(outfile, buf.buffer, buf.buffer_len);
+
+            /*
+            *   Returns the full content of /var/tmp/aesdsocketdata to the client
+            *   as soon as the received data packet completes.
+            */
+            int cbFileRead;
+            lseek(outfile, 0, SEEK_SET);
+            while ((cbFileRead = read(outfile, read_buffer, sizeof read_buffer)) > 0) {
+                write(cxn_fd, read_buffer, cbFileRead);
+            }
+
+            lseek(outfile, 0, SEEK_END);
+
+            // Done with the completed packet.
+            if (truncate_data(packet_size, &buf) < 0) {
+                printf("truncate_data failed");
+                result = -1;
+                break;
+            }
+        }
+    }
+
+    free_mybuf(&buf);
+
+    close(outfile);
     close(cxn_fd);
-    return 0;
+    return result;
 }
 
 int main(int argc, char *argv[]) {
@@ -101,11 +258,13 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    printf("Opened the socket [%d]\n", sockfd);
+    // Now we can fork for the daemon option (after bind succeeded).
 
     int result;
-
-    result = process_a_connection(sockfd);
+    do {
+        result = process_a_connection(sockfd);
+    }
+    while (result == 0);
 
     close(sockfd);
 
