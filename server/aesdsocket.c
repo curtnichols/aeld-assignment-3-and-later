@@ -63,8 +63,7 @@ int open_and_bind_socket() {
     return sockfd;
 }
 
-int listen_and_accept(int sockfd) {
-    struct sockaddr_storage their_addr;
+int listen_and_accept(int sockfd, struct sockaddr_storage *their_addr) {
     socklen_t addr_size;
     int result;
 
@@ -75,14 +74,14 @@ int listen_and_accept(int sockfd) {
         return result;
     }
 
-    addr_size = sizeof their_addr;
-    result = accept(sockfd, (struct sockaddr *)&their_addr, &addr_size);
+    addr_size = sizeof *their_addr;
+    result = accept(sockfd, (struct sockaddr *)their_addr, &addr_size);
     if (result == -1) {
         return -1;
     }
 
     char ip_str[NI_MAXHOST];
-    getnameinfo((struct sockaddr *)&their_addr, sizeof(their_addr), 
+    getnameinfo((struct sockaddr *)their_addr, sizeof(*their_addr), 
                 ip_str, sizeof(ip_str), 
                 NULL, 0, NI_NUMERICHOST);
     syslog(LOG_INFO, "Accepted connection from %s", ip_str);
@@ -184,8 +183,9 @@ int truncate_data(size_t skip_first, struct mybuf *buf) {
 
 int process_a_connection(int sockfd) {
     int cxn_fd;
+    struct sockaddr_storage their_addr;
 
-    cxn_fd = listen_and_accept(sockfd);
+    cxn_fd = listen_and_accept(sockfd, &their_addr);
     if (cxn_fd == -1) {
         printf("Couldn't listen and accept\n");
         return -1;
@@ -248,6 +248,13 @@ int process_a_connection(int sockfd) {
 
     close(outfile);
     close(cxn_fd);
+
+    char ip_str[NI_MAXHOST];
+    getnameinfo((struct sockaddr *)&their_addr, sizeof(their_addr), 
+                ip_str, sizeof(ip_str), 
+                NULL, 0, NI_NUMERICHOST);
+    syslog(LOG_INFO, "Closed connection from %s", ip_str);
+
     return result;
 }
 
