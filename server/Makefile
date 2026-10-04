@@ -5,7 +5,8 @@ CC  = $(CROSS_COMPILE)gcc
 CXX = $(CROSS_COMPILE)g++
 LD  = $(CROSS_COMPILE)ld
 
-CFLAGS ?=
+CFLAGS ?= -g -Wall -Werror
+#CFLAGS ?= -g -Wall -Werror -fsanitize=address
 
 all : aesdsocket
 
