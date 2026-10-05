@@ -11,6 +11,7 @@
 #include <fcntl.h>
 
 #define LOG(s) printf("aesdsocket: %s\n", (s))
+#define OUTPUT_FILE_PATH "/var/tmp/aesdsocketdata"
 
 int quitForSignal = 0;
 
@@ -197,7 +198,7 @@ int process_a_connection(int sockfd) {
     }
 
     int outfile = open(
-        "/var/tmp/aesdsocketdata",
+        OUTPUT_FILE_PATH,
         O_RDWR | O_CREAT | O_APPEND | O_SYNC,
         S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
     if (outfile == -1) {
@@ -296,6 +297,7 @@ int main(int argc, char *argv[]) {
     close(sockfd);
 
     if (quitForSignal) {
+        remove(OUTPUT_FILE_PATH);
         syslog(LOG_INFO, "Caught signal, exiting");
     }
 
