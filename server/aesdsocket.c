@@ -6,12 +6,13 @@
 #include <sys/socket.h>
 #include <syslog.h>
 #include <unistd.h>
+#include <signal.h>
 #include <netdb.h>
 #include <fcntl.h>
 
 #define LOG(s) printf("aesdsocket: %s\n", (s))
 
-int quit = 0;
+int quitForSignal = 0;
 
 void clean_up(struct addrinfo **res) {
     if (*res != NULL) {
@@ -187,6 +188,10 @@ int process_a_connection(int sockfd) {
 
     cxn_fd = listen_and_accept(sockfd, &their_addr);
     if (cxn_fd == -1) {
+        if (quitForSignal) {
+            return 0;
+        }
+
         printf("Couldn't listen and accept\n");
         return -1;
     }
@@ -197,6 +202,7 @@ int process_a_connection(int sockfd) {
         S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
     if (outfile == -1) {
         perror("Couldn't open output file");
+        close(cxn_fd);
         return -1;
     }
 
@@ -206,7 +212,7 @@ int process_a_connection(int sockfd) {
 
     int result = 0;
 
-    while (!quit && result == 0) {
+    while (!quitForSignal && result == 0) {
         ssize_t cb = read(cxn_fd, read_buffer, sizeof read_buffer);
         if (cb < 0) {
             result = -1;
@@ -258,7 +264,21 @@ int process_a_connection(int sockfd) {
     return result;
 }
 
+static void signal_handler(int signo, siginfo_t *info, void *context) {
+    quitForSignal = 1;
+}
+
+void register_signal_handlers() {
+    struct sigaction act = { 0 };
+    act.sa_sigaction = &signal_handler;
+
+    sigaction(SIGINT, &act, NULL);
+    sigaction(SIGTERM, &act, NULL);
+}
+
 int main(int argc, char *argv[]) {
+    register_signal_handlers();
+
     int sockfd = open_and_bind_socket();
     if (sockfd == -1) {
         printf("Couldn't open the socket\n");
@@ -271,10 +291,13 @@ int main(int argc, char *argv[]) {
     do {
         result = process_a_connection(sockfd);
     }
-    while (result == 0);
+    while (result == 0 && !quitForSignal);
 
     close(sockfd);
 
+    if (quitForSignal) {
+        syslog(LOG_INFO, "Caught signal, exiting");
+    }
+
     return 0;
 }
-
