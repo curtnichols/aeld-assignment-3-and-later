@@ -46,9 +46,10 @@ int open_and_bind_socket() {
     }
 
     {
-        int yes = 1;
-        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) != 0) {
-            perror("setsockopt failed");
+        int opt = 1;
+        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt) != 0) {
+            perror("setsockopt SO_REUSEADDR failed");
+            close(sockfd);
             return -1;
         }
     }
@@ -277,7 +278,20 @@ void register_signal_handlers() {
     sigaction(SIGTERM, &act, NULL);
 }
 
+#define DAEMON_OPTION "-d"
+
+void get_options(int argc, char *argv[], int * const as_daemon) {
+    *as_daemon = 0;
+
+    if (argc > 1) {
+        *as_daemon = strncmp(argv[1], DAEMON_OPTION, sizeof(DAEMON_OPTION)) == 0;
+    }
+}
+
 int main(int argc, char *argv[]) {
+    int as_daemon;
+
+    get_options(argc, argv, &as_daemon);
     register_signal_handlers();
 
     int sockfd = open_and_bind_socket();
@@ -287,6 +301,25 @@ int main(int argc, char *argv[]) {
     }
 
     // Now we can fork for the daemon option (after bind succeeded).
+    if (as_daemon) {
+        int pid = fork();
+        if (pid == -1) {
+            return -1;
+        }
+        else if (pid != 0) {
+            exit(EXIT_SUCCESS);
+        }
+
+        if (setsid() == -1) {
+            perror("setsid failed");
+            return -1;
+        }
+
+        if (chdir("/") == -1) {
+            perror("chdir failed");
+            return -1;
+        }
+    }
 
     int result;
     do {
