@@ -1,4 +1,5 @@
 *.o
+*.d
 writer
 aesdsocket
 Test_*_Runner.c
