@@ -21,6 +21,9 @@ LDFLAGS ?=
 
 all : $(TARGET)
 
+# Create a list of .d dependency files mapping to each object file
+DEPS = $(OBJS:.o=.d)
+
 # Linking the final executable
 $(TARGET): $(OBJS)
 	@mkdir -p $(dir $@)
@@ -28,7 +31,9 @@ $(TARGET): $(OBJS)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+-include $(DEPS)
 
 clean : 
 	rm -f $(TARGET) $(OBJS)
