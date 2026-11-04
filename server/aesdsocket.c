@@ -214,63 +214,6 @@ int start_connection_handler(
 
         return result;
     }
-
-    // struct mybuf buf;
-    // init_mybuf(&buf);
-    // char read_buffer[16 * 1024]; // stack size on ubuntu is 8192 KB (ulimit -s)
-
-    // int result = 0;
-
-    // while (!quitForSignal && result == 0) {
-    //     ssize_t cb = read(cxn_fd, read_buffer, sizeof read_buffer);
-    //     if (cb < 0) {
-    //         result = -1;
-    //         break;
-    //     }
-    //     else if (cb == 0) {
-    //         // socket was closed in an orderly fashion
-    //         break;
-    //     }
-
-    //     append_to_buffer(read_buffer, cb, &buf);
-    //     int packet_size;
-
-    //     while ((packet_size = length_of_incoming_data(&buf)) > 0) {
-    //         write(outfile, buf.buffer, buf.buffer_len);
-
-    //         /*
-    //         *   Returns the full content of /var/tmp/aesdsocketdata to the client
-    //         *   as soon as the received data packet completes.
-    //         */
-    //         int cbFileRead;
-    //         lseek(outfile, 0, SEEK_SET);
-    //         while ((cbFileRead = read(outfile, read_buffer, sizeof read_buffer)) > 0) {
-    //             write(cxn_fd, read_buffer, cbFileRead);
-    //         }
-
-    //         lseek(outfile, 0, SEEK_END);
-
-    //         // Done with the completed packet.
-    //         if (truncate_data(packet_size, &buf) < 0) {
-    //             printf("truncate_data failed");
-    //             result = -1;
-    //             break;
-    //         }
-    //     }
-    // }
-
-    // free_mybuf(&buf);
-
-    // close(outfile);
-    // close(cxn_fd);
-
-    // char ip_str[NI_MAXHOST];
-    // getnameinfo((struct sockaddr *)&their_addr, sizeof(their_addr), 
-    //             ip_str, sizeof(ip_str), 
-    //             NULL, 0, NI_NUMERICHOST);
-    // syslog(LOG_INFO, "Closed connection from %s", ip_str);
-
-    // return result;
 }
 
 static void signal_handler(int signo, siginfo_t *info, void *context) {
