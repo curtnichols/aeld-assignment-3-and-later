@@ -36,5 +36,5 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 -include $(DEPS)
 
 clean : 
-	rm -f $(TARGET) $(OBJS)
+	rm -f $(TARGET) $(OBJS) $(DEPS)
 
