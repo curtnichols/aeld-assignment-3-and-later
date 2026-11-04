@@ -5,6 +5,7 @@
 
 typedef struct {
     connection_thread_proc_fn *thread_proc;
+    chat_data_t *pchatdata; // not owned
     char *ip_str;
     int sock;
     pthread_mutex_t output_mutex;
@@ -18,6 +19,8 @@ static void *chat_thread_proc(void *pargs) {
         pthreaddata->sock,
         pthreaddata->ip_str,
         pthreaddata->output_mutex);
+
+    pthreaddata->pchatdata->done = 1;
 
     free(pargs);
     return NULL;
@@ -36,6 +39,7 @@ int create_chat_thread(
     if (!pthreaddata || !pchatdata) goto alloc_fail;
 
     pthreaddata->thread_proc = thread_proc;
+    pthreaddata->pchatdata = pchatdata; // not owned
     pthreaddata->ip_str = ip_str;
     pthreaddata->sock = sock;
     pthreaddata->output_mutex = output_mutex;
