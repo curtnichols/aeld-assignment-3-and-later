@@ -64,4 +64,5 @@ alloc_fail:
 void delete_chat_data(chat_data_t *pdata) {
     assert(pdata->done);
     pthread_join(pdata->thread_id, NULL);
+    free(pdata);
 }
