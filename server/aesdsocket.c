@@ -1,7 +1,11 @@
 #include "chat.h"
 #include "chatlist.h"
 #include "mybuf.h"
+#include <assert.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -216,6 +220,91 @@ int start_connection_handler(
     }
 }
 
+typedef struct {
+    pthread_mutex_t *output_mutex;
+    pthread_mutex_t *thread_mutex;
+    pthread_cond_t *condition;
+    volatile bool running;
+} timestamp_data_t;
+
+static void *timestamp_thread_proc(void *pargs) {
+    assert(pargs);
+    timestamp_data_t *pdata = (timestamp_data_t*)pargs;
+
+    while (true ) {
+        pthread_mutex_lock(pdata->thread_mutex);
+
+        if (!pdata->running) {
+            pthread_mutex_unlock(pdata->thread_mutex);
+            break;
+        }
+
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        ts.tv_sec += 10;
+
+        int waitResult =
+            pthread_cond_timedwait(pdata->condition, pdata->thread_mutex, &ts);
+
+        if (!pdata->running) {
+            pthread_mutex_unlock(pdata->thread_mutex);
+            break;
+        }
+
+        pthread_mutex_unlock(pdata->thread_mutex);
+
+        if (waitResult == ETIMEDOUT) {
+            const char * const format2822 = "%a, %d %b %Y %T %z";
+            char buf[100];
+            time_t t = time(NULL);
+            struct tm *tmp = localtime(&t);
+            if (tmp) {
+                size_t slen;
+                if ((slen = strftime(buf, sizeof(buf), format2822, tmp)) != 0) {
+                    pthread_mutex_lock(pdata->output_mutex);
+
+                    int outfile = open(
+                        OUTPUT_FILE_PATH,
+                        O_RDWR | O_CREAT | O_APPEND | O_SYNC,
+                        S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+                    if (outfile == -1) {
+                        perror("Couldn't open output file");
+                        syslog(LOG_ERR, "Couldn't open output file %s", OUTPUT_FILE_PATH);
+                    }
+                    else {
+                        write(outfile, "timestamp:", 10);
+                        write(outfile, buf, slen);
+                        write(outfile, "\n", 1);
+                        close(outfile);
+                    }
+
+                    pthread_mutex_unlock(pdata->output_mutex);
+                }
+            }
+
+        }
+    }
+
+    return NULL;
+}
+
+void stop_timestamp_thread(pthread_t thread_id, timestamp_data_t *pdata) {
+    pthread_mutex_lock(pdata->thread_mutex);
+    pdata->running = false;
+    pthread_cond_signal(pdata->condition); // Instantly wake up the thread if it's sleeping
+    pthread_mutex_unlock(pdata->thread_mutex);
+
+    pthread_join(thread_id, NULL); // Wait for it to finish
+}
+
+void init_timestamp_condition(pthread_cond_t *pcond) {
+    pthread_condattr_t attr;
+    pthread_condattr_init(&attr);
+    pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+    pthread_cond_init(pcond, &attr);
+    pthread_condattr_destroy(&attr);
+}
+
 static void signal_handler(int signo, siginfo_t *info, void *context) {
     quitForSignal = 1;
 }
@@ -253,6 +342,27 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+    pthread_mutex_t thread_mutex;
+    if (pthread_mutex_init(&thread_mutex, NULL) != 0) {
+        perror("Couldn't create the thread mutex");
+        return -1;
+    }
+
+    pthread_cond_t timestamp_condition;
+    init_timestamp_condition(&timestamp_condition);
+
+    timestamp_data_t *ptimestamp_data = calloc(1, sizeof(timestamp_data_t));
+    ptimestamp_data->output_mutex = &output_mutex;
+    ptimestamp_data->thread_mutex = &thread_mutex;
+    ptimestamp_data->condition = &timestamp_condition;
+    ptimestamp_data->running = 1;
+
+    pthread_t timestamp_thread;
+    if (pthread_create(&timestamp_thread, NULL, timestamp_thread_proc, ptimestamp_data) != 0) {
+        perror("Failed to create thread");
+        return 1;
+    }
+
     int sockfd = open_and_bind_socket();
     if (sockfd == -1) {
         printf("Couldn't open the socket\n");
@@ -288,6 +398,10 @@ int main(int argc, char *argv[]) {
 
     close(sockfd);
     pthread_mutex_destroy(&output_mutex);
+    pthread_mutex_destroy(&thread_mutex);
+
+    stop_timestamp_thread(timestamp_thread, ptimestamp_data);
+    free(ptimestamp_data);
 
     while (!SLIST_EMPTY(&chatlist_head))
     {
