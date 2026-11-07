@@ -138,7 +138,13 @@ int process_a_connection(
         int packet_size;
 
         while ((packet_size = length_of_incoming_data(&buf)) > 0) {
-            write(outfile, buf.buffer, buf.buffer_len);
+            int cbWritten;
+
+            cbWritten = write(outfile, buf.buffer, buf.buffer_len);
+            if (cbWritten != buf.buffer_len) {
+                result = -1;
+                break;
+            }
 
             /*
             *   Returns the full content of /var/tmp/aesdsocketdata to the client
@@ -147,7 +153,15 @@ int process_a_connection(
             int cbFileRead;
             lseek(outfile, 0, SEEK_SET);
             while ((cbFileRead = read(outfile, read_buffer, sizeof read_buffer)) > 0) {
-                write(sock, read_buffer, cbFileRead);
+                cbWritten = write(sock, read_buffer, cbFileRead);
+                if (cbWritten != cbFileRead) {
+                    result = -1;
+                    break;
+                }
+            }
+
+            if (result == -1) {
+                break;
             }
 
             lseek(outfile, 0, SEEK_END);
@@ -272,9 +286,10 @@ static void *timestamp_thread_proc(void *pargs) {
                         syslog(LOG_ERR, "Couldn't open output file %s", OUTPUT_FILE_PATH);
                     }
                     else {
-                        write(outfile, "timestamp:", 10);
-                        write(outfile, buf, slen);
-                        write(outfile, "\n", 1);
+                        int cbWritten;
+                        cbWritten = write(outfile, "timestamp:", 10);
+                        if (cbWritten > 0) cbWritten = write(outfile, buf, slen);
+                        if (cbWritten > 0) cbWritten = write(outfile, "\n", 1);
                         close(outfile);
                     }
 
