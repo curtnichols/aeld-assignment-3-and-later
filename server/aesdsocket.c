@@ -129,6 +129,7 @@ int process_a_connection(
             OUTPUT_FILE_PATH,
             O_RDWR | O_CREAT | O_APPEND | O_SYNC,
             S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+syslog(LOG_INFO, "Opened output file [%s]", OUTPUT_FILE_PATH);
         if (outfile == -1) {
             perror("Couldn't open output file");
             syslog(LOG_ERR, "Couldn't open output file %s", OUTPUT_FILE_PATH);
@@ -242,8 +243,11 @@ typedef struct {
 } timestamp_data_t;
 
 static void *timestamp_thread_proc(void *pargs) {
+    syslog(LOG_INFO, "in timestamp_thread_proc");
+    
     assert(pargs);
     timestamp_data_t *pdata = (timestamp_data_t*)pargs;
+    syslog(LOG_INFO, "in timestamp_thread_proc 2");
 
     while (true ) {
         pthread_mutex_lock(pdata->thread_mutex);
@@ -343,23 +347,30 @@ void get_options(int argc, char *argv[], int * const as_daemon) {
 }
 
 int main(int argc, char *argv[]) {
+    syslog(LOG_INFO, "AAA");
+
     int as_daemon;
 
     get_options(argc, argv, &as_daemon);
     register_signal_handlers();
+    syslog(LOG_INFO, "BBB");
 
     chatlist_head_t chatlist_head;
     SLIST_INIT(&chatlist_head);
 
     pthread_mutex_t output_mutex;
     if (pthread_mutex_init(&output_mutex, NULL) != 0) {
-        perror("Couldn't create the output mutex");
+        const char * const msg = "Couldn't create the output mutex";
+        perror(msg);
+        syslog(LOG_ERR, msg);
         return -1;
     }
 
     pthread_mutex_t thread_mutex;
     if (pthread_mutex_init(&thread_mutex, NULL) != 0) {
-        perror("Couldn't create the thread mutex");
+        const char * const msg = "Couldn't create the thread mutex";
+        perror(msg);
+        syslog(LOG_ERR, msg);
         return -1;
     }
 
@@ -374,13 +385,17 @@ int main(int argc, char *argv[]) {
 
     pthread_t timestamp_thread;
     if (pthread_create(&timestamp_thread, NULL, timestamp_thread_proc, ptimestamp_data) != 0) {
-        perror("Failed to create thread");
+        const char * const msg = "Failed to create thread";
+        perror(msg);
+        syslog(LOG_ERR, msg);
         return 1;
     }
 
     int sockfd = open_and_bind_socket();
     if (sockfd == -1) {
-        printf("Couldn't open the socket\n");
+        const char * const msg = "Couldn't open the socket";
+        perror(msg);
+        syslog(LOG_ERR, msg);
         return -1;
     }
 
@@ -388,19 +403,28 @@ int main(int argc, char *argv[]) {
     if (as_daemon) {
         int pid = fork();
         if (pid == -1) {
+            const char * const msg = "fork() failed";
+            perror(msg);
+            syslog(LOG_ERR, msg);
             return -1;
         }
         else if (pid != 0) {
+            const char * const msg = "fork() succeeded";
+            syslog(LOG_INFO, msg);
             exit(EXIT_SUCCESS);
         }
 
         if (setsid() == -1) {
-            perror("setsid failed");
+            const char * const msg = "setsid failed";
+            perror(msg);
+            syslog(LOG_ERR, msg);
             return -1;
         }
 
         if (chdir("/") == -1) {
-            perror("chdir failed");
+            const char * const msg = "chdir failed";
+            perror(msg);
+            syslog(LOG_ERR, msg);
             return -1;
         }
     }
