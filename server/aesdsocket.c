@@ -124,23 +124,21 @@ int process_a_connection(
 
         append_to_buffer(read_buffer, cb, &buf);
 
-        pthread_mutex_lock(&output_mutex);
-
-        int outfile = open(
-            OUTPUT_FILE_PATH,
-            O_RDWR | O_CREAT | O_APPEND | O_SYNC,
-            S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-syslog(LOG_INFO, "Opened output file [%s]", OUTPUT_FILE_PATH);
-        if (outfile == -1) {
-            perror("Couldn't open output file");
-            syslog(LOG_ERR, "Couldn't open output file %s", OUTPUT_FILE_PATH);
-            goto cant_open_output;
-        }
-
         int packet_size;
 
         while ((packet_size = length_of_incoming_data(&buf)) > 0) {
             int cbWritten;
+
+            pthread_mutex_lock(&output_mutex);
+            int outfile = open(
+                OUTPUT_FILE_PATH,
+                O_RDWR | O_CREAT | O_APPEND | O_SYNC,
+                S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+            if (outfile == -1) {
+                perror("Couldn't open output file");
+                syslog(LOG_ERR, "Couldn't open output file %s", OUTPUT_FILE_PATH);
+                goto cant_open_output;
+            }
 
             cbWritten = write(outfile, buf.buffer, buf.buffer_len);
             if (cbWritten != buf.buffer_len) {
@@ -167,6 +165,8 @@ syslog(LOG_INFO, "Opened output file [%s]", OUTPUT_FILE_PATH);
             }
 
             lseek(outfile, 0, SEEK_END);
+            close(outfile);
+            pthread_mutex_unlock(&output_mutex);
 
             // Done with the completed packet.
             if (truncate_data(packet_size, &buf) < 0) {
@@ -175,10 +175,6 @@ syslog(LOG_INFO, "Opened output file [%s]", OUTPUT_FILE_PATH);
                 break;
             }
         }
-
-        close(outfile);
-
-        pthread_mutex_unlock(&output_mutex);
     }
 
 cant_open_output:
