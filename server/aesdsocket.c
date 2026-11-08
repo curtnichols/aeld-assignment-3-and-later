@@ -298,7 +298,7 @@ static void *timestamp_thread_proc(void *pargs) {
                     else {
                         if (write(outfile, "timestamp: ", 11) > 0) {
                             if (write(outfile, buf, slen) > 0) {
-                                write(outfile, "\n", 1);
+                                if (write(outfile, "\n", 1) > 0) { } // compiler warnings as errors
                             }
                         }
                         close(outfile);
