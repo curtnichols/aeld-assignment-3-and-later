@@ -261,6 +261,7 @@ static void *timestamp_thread_proc(void *pargs) {
         clock_gettime(CLOCK_MONOTONIC, &ts);
         ts.tv_sec += 10;
 
+retry_after_spurious_wakeup:
         int waitResult =
             pthread_cond_timedwait(pdata->condition, pdata->thread_mutex, &ts);
 
@@ -300,7 +301,9 @@ static void *timestamp_thread_proc(void *pargs) {
                     pthread_mutex_unlock(pdata->output_mutex);
                 }
             }
-
+        }
+        else {
+            goto retry_after_spurious_wakeup;
         }
     }
 
@@ -362,7 +365,7 @@ int main(int argc, char *argv[]) {
     if (pthread_mutex_init(&output_mutex, NULL) != 0) {
         const char * const msg = "Couldn't create the output mutex";
         perror(msg);
-        syslog(LOG_ERR, msg);
+        syslog(LOG_ERR, "%s", msg);
         return -1;
     }
 
@@ -370,7 +373,7 @@ int main(int argc, char *argv[]) {
     if (pthread_mutex_init(&thread_mutex, NULL) != 0) {
         const char * const msg = "Couldn't create the thread mutex";
         perror(msg);
-        syslog(LOG_ERR, msg);
+        syslog(LOG_ERR, "%s", msg);
         return -1;
     }
 
@@ -387,7 +390,7 @@ int main(int argc, char *argv[]) {
     if (pthread_create(&timestamp_thread, NULL, timestamp_thread_proc, ptimestamp_data) != 0) {
         const char * const msg = "Failed to create thread";
         perror(msg);
-        syslog(LOG_ERR, msg);
+        syslog(LOG_ERR, "%s", msg);
         return 1;
     }
 
@@ -395,7 +398,7 @@ int main(int argc, char *argv[]) {
     if (sockfd == -1) {
         const char * const msg = "Couldn't open the socket";
         perror(msg);
-        syslog(LOG_ERR, msg);
+        syslog(LOG_ERR, "%s", msg);
         return -1;
     }
 
@@ -405,29 +408,32 @@ int main(int argc, char *argv[]) {
         if (pid == -1) {
             const char * const msg = "fork() failed";
             perror(msg);
-            syslog(LOG_ERR, msg);
+            syslog(LOG_ERR, "%s", msg);
             return -1;
         }
         else if (pid != 0) {
             const char * const msg = "fork() succeeded";
-            syslog(LOG_INFO, msg);
+            syslog(LOG_INFO, "%s", msg);
             exit(EXIT_SUCCESS);
         }
 
         if (setsid() == -1) {
             const char * const msg = "setsid failed";
             perror(msg);
-            syslog(LOG_ERR, msg);
+            syslog(LOG_ERR, "%s", msg);
             return -1;
         }
 
         if (chdir("/") == -1) {
             const char * const msg = "chdir failed";
             perror(msg);
-            syslog(LOG_ERR, msg);
+            syslog(LOG_ERR, "%s", msg);
             return -1;
         }
     }
+
+    openlog("aesdsocket", LOG_PID, LOG_DAEMON);
+    syslog(LOG_INFO, "Daemon initialized and logging to syslog");
 
     int result;
     do {
