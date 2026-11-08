@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <syslog.h>
 #include <unistd.h>
 #include <signal.h>
@@ -19,7 +20,7 @@
 #define LOG(s) printf("aesdsocket: %s\n", (s))
 #define OUTPUT_FILE_PATH "/var/tmp/aesdsocketdata"
 
-int quitForSignal = 0;
+sig_atomic_t quitForSignal = 0;
 
 void clean_up(struct addrinfo **res) {
     if (*res != NULL) {
@@ -192,9 +193,8 @@ cant_open_output:
 
 char *alloc_ip_str(struct sockaddr_storage *ptheir_addr) {
     char *s = calloc(NI_MAXHOST, sizeof(char));
-    char ip_str[NI_MAXHOST];
     getnameinfo((struct sockaddr *)ptheir_addr, sizeof(*ptheir_addr), 
-                ip_str, NI_MAXHOST * sizeof(char), 
+                s, NI_MAXHOST * sizeof(char), 
                 NULL, 0, NI_NUMERICHOST);
     return s;
 }
@@ -345,7 +345,7 @@ void get_options(int argc, char *argv[], int * const as_daemon) {
     *as_daemon = 0;
 
     if (argc > 1) {
-        *as_daemon = strncmp(argv[1], DAEMON_OPTION, sizeof(DAEMON_OPTION)) == 0;
+        *as_daemon = strcmp(argv[1], DAEMON_OPTION) == 0;
     }
 }
 
@@ -424,11 +424,24 @@ int main(int argc, char *argv[]) {
             return -1;
         }
 
+        umask(0);
+
         if (chdir("/") == -1) {
             const char * const msg = "chdir failed";
             perror(msg);
             syslog(LOG_ERR, "%s", msg);
             return -1;
+        }
+
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull != -1) {
+            dup2(devnull, STDIN_FILENO);
+            dup2(devnull, STDOUT_FILENO);
+            dup2(devnull, STDERR_FILENO);
+
+            if (devnull > 2) {
+                close(devnull);
+            }
         }
     }
 
