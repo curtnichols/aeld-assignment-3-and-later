@@ -376,23 +376,6 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    pthread_cond_t timestamp_condition;
-    init_timestamp_condition(&timestamp_condition);
-
-    timestamp_data_t *ptimestamp_data = calloc(1, sizeof(timestamp_data_t));
-    ptimestamp_data->output_mutex = &output_mutex;
-    ptimestamp_data->thread_mutex = &thread_mutex;
-    ptimestamp_data->condition = &timestamp_condition;
-    ptimestamp_data->running = 1;
-
-    pthread_t timestamp_thread;
-    if (pthread_create(&timestamp_thread, NULL, timestamp_thread_proc, ptimestamp_data) != 0) {
-        const char * const msg = "Failed to create thread";
-        perror(msg);
-        syslog(LOG_ERR, "%s", msg);
-        return 1;
-    }
-
     int sockfd = open_and_bind_socket();
     if (sockfd == -1) {
         const char * const msg = "Couldn't open the socket";
@@ -400,6 +383,8 @@ int main(int argc, char *argv[]) {
         syslog(LOG_ERR, "%s", msg);
         return -1;
     }
+
+    // FORK ---------------------------------------------
 
     // Now we can fork for the daemon option (after bind succeeded).
     if (as_daemon) {
@@ -444,8 +429,27 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // POST FORK ----------------------------------------
+
     openlog("aesdsocket", LOG_PID, LOG_DAEMON);
     syslog(LOG_INFO, "Daemon initialized and logging to syslog");
+
+    pthread_cond_t timestamp_condition;
+    init_timestamp_condition(&timestamp_condition);
+
+    timestamp_data_t *ptimestamp_data = calloc(1, sizeof(timestamp_data_t));
+    ptimestamp_data->output_mutex = &output_mutex;
+    ptimestamp_data->thread_mutex = &thread_mutex;
+    ptimestamp_data->condition = &timestamp_condition;
+    ptimestamp_data->running = 1;
+
+    pthread_t timestamp_thread;
+    if (pthread_create(&timestamp_thread, NULL, timestamp_thread_proc, ptimestamp_data) != 0) {
+        const char * const msg = "Failed to create thread";
+        perror(msg);
+        syslog(LOG_ERR, "%s", msg);
+        return 1;
+    }
 
     int result;
     do {
