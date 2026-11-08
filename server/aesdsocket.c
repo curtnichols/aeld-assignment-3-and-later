@@ -249,7 +249,10 @@ static void *timestamp_thread_proc(void *pargs) {
     timestamp_data_t *pdata = (timestamp_data_t*)pargs;
     syslog(LOG_INFO, "in timestamp_thread_proc 2");
 
-    while (true ) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+
+    while (true) {
         pthread_mutex_lock(pdata->thread_mutex);
 
         if (!pdata->running) {
@@ -257,13 +260,14 @@ static void *timestamp_thread_proc(void *pargs) {
             break;
         }
 
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
         ts.tv_sec += 10;
 
-retry_after_spurious_wakeup:
-        int waitResult =
-            pthread_cond_timedwait(pdata->condition, pdata->thread_mutex, &ts);
+        int waitResult = 0;
+        
+        // Loop for spurious wakeups. 
+        while (pdata->running && waitResult != ETIMEDOUT) {
+            waitResult = pthread_cond_timedwait(pdata->condition, pdata->thread_mutex, &ts);
+        }
 
         if (!pdata->running) {
             pthread_mutex_unlock(pdata->thread_mutex);
@@ -277,33 +281,32 @@ retry_after_spurious_wakeup:
             char buf[100];
             time_t t = time(NULL);
             struct tm *tmp = localtime(&t);
+            
             if (tmp) {
-                size_t slen;
-                if ((slen = strftime(buf, sizeof(buf), format2822, tmp)) != 0) {
+                size_t slen = strftime(buf, sizeof(buf), format2822, tmp);
+                if (slen > 0) {
                     pthread_mutex_lock(pdata->output_mutex);
 
                     int outfile = open(
                         OUTPUT_FILE_PATH,
                         O_RDWR | O_CREAT | O_APPEND | O_SYNC,
                         S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+                        
                     if (outfile == -1) {
-                        perror("Couldn't open output file");
-                        syslog(LOG_ERR, "Couldn't open output file %s", OUTPUT_FILE_PATH);
+                        syslog(LOG_ERR, "Couldn't open output file %s: %m", OUTPUT_FILE_PATH);
                     }
                     else {
-                        int cbWritten;
-                        cbWritten = write(outfile, "timestamp:", 10);
-                        if (cbWritten > 0) cbWritten = write(outfile, buf, slen);
-                        if (cbWritten > 0) cbWritten = write(outfile, "\n", 1);
+                        if (write(outfile, "timestamp: ", 11) > 0) {
+                            if (write(outfile, buf, slen) > 0) {
+                                write(outfile, "\n", 1);
+                            }
+                        }
                         close(outfile);
                     }
 
                     pthread_mutex_unlock(pdata->output_mutex);
                 }
             }
-        }
-        else {
-            goto retry_after_spurious_wakeup;
         }
     }
 
