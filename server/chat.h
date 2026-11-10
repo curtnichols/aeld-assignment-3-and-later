@@ -14,14 +14,14 @@ typedef struct chat_data {
 typedef int connection_thread_proc_fn(
     int sock, // owned
     char* ip_str, // owned
-    pthread_mutex_t output_mutex // not owned
+    pthread_mutex_t *output_mutex // not owned
     );
 
 int create_chat_thread(
     connection_thread_proc_fn *thread_proc,
     int sock,
     char *ip_str,
-    pthread_mutex_t output_mutex,
+    pthread_mutex_t *output_mutex,
     chat_data_t **ppdata);
 
 void delete_chat_data(chat_data_t *pdata);

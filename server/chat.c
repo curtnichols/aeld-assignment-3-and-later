@@ -8,7 +8,7 @@ typedef struct {
     chat_data_t *pchatdata; // not owned
     char *ip_str;
     int sock;
-    pthread_mutex_t output_mutex;
+    pthread_mutex_t *output_mutex;
 } chat_thread_data_t;
 
 static void *chat_thread_proc(void *pargs) {
@@ -30,7 +30,7 @@ int create_chat_thread(
     connection_thread_proc_fn *thread_proc,
     int sock,
     char *ip_str,
-    pthread_mutex_t output_mutex,
+    pthread_mutex_t *output_mutex,
     chat_data_t **ppdata)
 {
     int result = 0;

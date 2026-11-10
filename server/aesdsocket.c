@@ -102,7 +102,7 @@ int listen_and_accept(int sockfd, struct sockaddr_storage *their_addr) {
 int process_a_connection(
     int sock, // owned
     char* ip_str, // owned
-    pthread_mutex_t output_mutex // not owned
+    pthread_mutex_t *output_mutex // not owned
     )
 {
     struct mybuf buf;
@@ -129,7 +129,7 @@ int process_a_connection(
         while ((packet_size = length_of_incoming_data(&buf)) > 0) {
             int cbWritten;
 
-            pthread_mutex_lock(&output_mutex);
+            pthread_mutex_lock(output_mutex);
             int outfile = open(
                 OUTPUT_FILE_PATH,
                 O_RDWR | O_CREAT | O_APPEND | O_SYNC,
@@ -166,7 +166,7 @@ int process_a_connection(
 
             lseek(outfile, 0, SEEK_END);
             close(outfile);
-            pthread_mutex_unlock(&output_mutex);
+            pthread_mutex_unlock(output_mutex);
 
             // Done with the completed packet.
             if (truncate_data(packet_size, &buf) < 0) {
@@ -198,7 +198,7 @@ char *alloc_ip_str(struct sockaddr_storage *ptheir_addr) {
 int start_connection_handler(
     chatlist_head_t *chatlist_head,
     int sockfd,
-    pthread_mutex_t output_mutex)
+    pthread_mutex_t *output_mutex)
 {
     int cxn_fd;
     struct sockaddr_storage their_addr;
@@ -453,7 +453,7 @@ int main(int argc, char *argv[]) {
 
     int result;
     do {
-        result = start_connection_handler(&chatlist_head, sockfd, output_mutex);
+        result = start_connection_handler(&chatlist_head, sockfd, &output_mutex);
     }
     while (result == 0 && !quitForSignal);
 
